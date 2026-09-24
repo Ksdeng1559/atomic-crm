@@ -1,4 +1,6 @@
 import { CRM } from "@/components/atomic-crm/root/CRM";
+// Capital Raise OS dashboard is the home screen (Atomic's activity dashboard lives under the "Activity" tab)
+import { CapitalDashboard } from "@/components/atomic-crm/capital/CapitalDashboard";
 
 /**
  * Application entry point
@@ -31,6 +33,6 @@ import { CRM } from "@/components/atomic-crm/root/CRM";
  *    />
  * );
  */
-const App = () => <CRM />;
+const App = () => <CRM dashboard={CapitalDashboard} />;
 
 export default App;
