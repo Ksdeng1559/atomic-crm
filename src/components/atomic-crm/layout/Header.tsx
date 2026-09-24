@@ -85,9 +85,9 @@ const Header = () => {
                     to="/deals"
                     isActive={currentPath === "/deals"}
                   />
-                  {/* Capital Raise OS pages */}
+                  {/* Capital Raise OS pages ("Dashboard" = Capital OS; "Activity" = Atomic default dashboard) */}
                   <NavigationTab
-                    label="Capital OS"
+                    label="Activity"
                     to={CAPITAL_ROUTES.dashboard}
                     isActive={currentPath === CAPITAL_ROUTES.dashboard}
                   />
