@@ -65,6 +65,16 @@ const Header = () => {
                     isActive={currentPath === "/"}
                   />
                   <NavigationTab
+                    label="Goals"
+                    to={CAPITAL_ROUTES.goals}
+                    isActive={currentPath === CAPITAL_ROUTES.goals}
+                  />
+                  <NavigationTab
+                    label="Tasks"
+                    to={CAPITAL_ROUTES.tasks}
+                    isActive={currentPath === CAPITAL_ROUTES.tasks}
+                  />
+                  <NavigationTab
                     label={translate("resources.contacts.name", {
                       smart_count: 2,
                     })}
@@ -90,16 +100,6 @@ const Header = () => {
                     label="Activity"
                     to={CAPITAL_ROUTES.dashboard}
                     isActive={currentPath === CAPITAL_ROUTES.dashboard}
-                  />
-                  <NavigationTab
-                    label="Goals"
-                    to={CAPITAL_ROUTES.goals}
-                    isActive={currentPath === CAPITAL_ROUTES.goals}
-                  />
-                  <NavigationTab
-                    label="Tasks"
-                    to={CAPITAL_ROUTES.tasks}
-                    isActive={currentPath === CAPITAL_ROUTES.tasks}
                   />
                 </nav>
               </div>
