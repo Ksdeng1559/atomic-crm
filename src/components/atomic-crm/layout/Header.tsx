@@ -9,6 +9,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useConfigurationContext } from "../root/ConfigurationContext";
 import { ImportPage } from "../misc/ImportPage";
 import { ChangelogPage } from "../misc/ChangelogPage";
+import { CAPITAL_ROUTES } from "../capital/capitalMetrics";
 
 const Header = () => {
   const { darkModeLogo, lightModeLogo, title } = useConfigurationContext();
@@ -24,6 +25,12 @@ const Header = () => {
     currentPath = "/companies";
   } else if (matchPath("/deals/*", location.pathname)) {
     currentPath = "/deals";
+  } else if (matchPath(CAPITAL_ROUTES.dashboard, location.pathname)) {
+    currentPath = CAPITAL_ROUTES.dashboard;
+  } else if (matchPath(CAPITAL_ROUTES.goals, location.pathname)) {
+    currentPath = CAPITAL_ROUTES.goals;
+  } else if (matchPath(CAPITAL_ROUTES.tasks, location.pathname)) {
+    currentPath = CAPITAL_ROUTES.tasks;
   } else {
     currentPath = false;
   }
@@ -77,6 +84,22 @@ const Header = () => {
                     })}
                     to="/deals"
                     isActive={currentPath === "/deals"}
+                  />
+                  {/* Capital Raise OS pages */}
+                  <NavigationTab
+                    label="Capital OS"
+                    to={CAPITAL_ROUTES.dashboard}
+                    isActive={currentPath === CAPITAL_ROUTES.dashboard}
+                  />
+                  <NavigationTab
+                    label="Goals"
+                    to={CAPITAL_ROUTES.goals}
+                    isActive={currentPath === CAPITAL_ROUTES.goals}
+                  />
+                  <NavigationTab
+                    label="Tasks"
+                    to={CAPITAL_ROUTES.tasks}
+                    isActive={currentPath === CAPITAL_ROUTES.tasks}
                   />
                 </nav>
               </div>
