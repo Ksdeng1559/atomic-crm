@@ -59,6 +59,10 @@ import { ContactListMobile } from "../contacts/ContactList.tsx";
 import { ContactShow } from "../contacts/ContactShow.tsx";
 import { CompanyShow } from "../companies/CompanyShow.tsx";
 import { NoteShowPage } from "../notes/NoteShowPage.tsx";
+import { CapitalDashboard } from "../capital/CapitalDashboard";
+import { GoalsPage } from "../capital/GoalsPage";
+import { TaskBoardPage } from "../capital/TaskBoardPage";
+import { CAPITAL_ROUTES } from "../capital/capitalMetrics";
 
 const defaultStore = localStorageStore(undefined, "CRM");
 
@@ -261,6 +265,10 @@ const DesktopAdmin = (
         <Route path={SettingsPage.path} element={<SettingsPage />} />
         <Route path={ImportPage.path} element={<ImportPage />} />
         <Route path={ChangelogPage.path} element={<ChangelogPage />} />
+        {/* Capital Raise OS pages */}
+        <Route path={CAPITAL_ROUTES.dashboard} element={<CapitalDashboard />} />
+        <Route path={CAPITAL_ROUTES.goals} element={<GoalsPage />} />
+        <Route path={CAPITAL_ROUTES.tasks} element={<TaskBoardPage />} />
       </CustomRoutes>
       <Resource name="deals" {...deals} />
       <Resource name="contacts" {...contacts} />
