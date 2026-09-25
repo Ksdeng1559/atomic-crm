@@ -116,11 +116,40 @@ The `mcp` edge function exposes the CRM to AI assistants (Claude, ChatGPT, VS Co
 
 ## Roadmap
 
-- [ ] **Dashboard chatbox** — ask for a "Most Important Tasks" briefing from live CRM data (Supabase edge function → OpenRouter; API key stored as a Supabase secret).
+Integrations follow one pattern: the browser never holds third-party API keys. Each external service is called from a Supabase Edge Function, with its key stored as a Supabase secret, and results are written back to CRM records (notes, tasks, deal stage).
+
+### Phase A — Communications & scheduling
+
+1. [ ] **Transactional email (Postmark)** — custom SMTP for Supabase Auth (invites, password reset) so Andy and Gilbert can be invited; then the `postmark` edge function for **inbound email** (CC the CRM to log investor emails as notes). *Prerequisite for multi-user use.*
+2. [ ] **Webinar & meeting bookings (Google Calendar)** — booking page via a scheduler that syncs with Google Calendar (Cal.com or Calendly — to be chosen after a pricing/features check). A booking webhook → edge function will: create/match the contact, log the booking as a note, create a follow-up task, and move the deal to *Meeting*. Webinar registrations and attendance shown on the Dashboard.
+
+### Phase B — Intelligence
+
+3. [ ] **Investor brief / lead enrichment (Tavily, Exa.ai)** — "Generate investor brief" button on company and contact pages. Edge function runs targeted web searches (thesis, resource/ESG deal history, fund and cheque size, recent news, contact background), an LLM via OpenRouter writes a one-page brief and scores the four Signal Engine dimensions (Capital Availability, Resource & Gold Interest, ESG Alignment, Relationship Access) with a suggested first talking point. Saved to the record with source links, marked *unverified* until reviewed. Tavily first for briefs; Exa later for "find investors similar to our best ones". Public sources only, no sensitive personal data (PIPEDA / CCPA).
+4. [ ] **Dashboard chatbox** — ask for a "Most Important Tasks" briefing from live CRM data and enrichment briefs (edge function → OpenRouter; `OPENROUTER_API_KEY` stored as a Supabase secret). Phased: briefing → read-only Q&A → actions with approval → voice input and daily digest.
+
+### Phase C — Deal execution & compliance
+
+5. [ ] **E-signature** for NDAs and subscription documents (DocuSign, Dropbox Sign or Documenso). Signed NDA → unlock data room; signed subscription docs → deal moves to *Committed*.
+6. [ ] **Investor data room** — secure document sharing with view tracking (DocSend, or Supabase Storage signed URLs plus an access log in the CRM).
+7. [ ] **Accredited-investor verification (KYC / AML)** — third-party verification status on each investor record (Reg D 506(c) "reasonable steps"; NI 45-106 exemptions). Approach to be confirmed with securities counsel.
+8. [ ] **Email sequences** for webinar invites, reminders and follow-ups (compliance-reviewed wording, unsubscribe handling). Separate from transactional email.
+9. [ ] **Audit log** — who emailed whom, what was shared, and stage changes over time.
+
+### Housekeeping
+
 - [ ] Validate Foundersuite CSV import column mapping.
-- [ ] Voice notes on deals (Whisper-style transcription via the same backend relay).
+- [ ] Voice notes on deals (Whisper-style transcription via the same backend relay pattern).
 - [ ] Add the `goals` migration to `supabase/migrations/` so the schema is fully reproducible.
-- [ ] Remaining edge functions: `merge_contacts`, `delete_note_attachments`, `postmark` (inbound email).
+- [ ] Remaining upstream edge functions: `merge_contacts`, `delete_note_attachments`.
+- [ ] Complete Supabase Auth settings (Site URL, OAuth Server) — see *Configuration*.
+
+### Done
+
+- [x] Atomic CRM fork deployed on Vercel with Supabase backend.
+- [x] Capital-raise pipeline stages, investor categories, mock investor data.
+- [x] Capital Raise OS dashboard (home), Goals & milestones, Task board.
+- [x] MCP server edge function for AI assistants.
 
 ---
 
