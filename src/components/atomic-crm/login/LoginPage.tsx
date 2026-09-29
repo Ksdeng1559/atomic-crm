@@ -7,6 +7,7 @@ import { TextInput } from "@/components/admin/text-input";
 import { Notification } from "@/components/admin/notification";
 import { useConfigurationContext } from "@/components/atomic-crm/root/ConfigurationContext.tsx";
 import { SSOAuthButton } from "./SSOAuthButton";
+import { URBAN_MINING_LOGO_URL } from "@/components/atomic-crm/capital/osUi";
 import {
   disableEmailPasswordAuthentication,
   googleWorkplaceDomain,
@@ -22,7 +23,7 @@ import {
  * @see {@link https://marmelab.com/shadcn-admin-kit/docs/security Security documentation}
  */
 export const LoginPage = (props: { redirectTo?: string }) => {
-  const { darkModeLogo, title } = useConfigurationContext();
+  const { title } = useConfigurationContext();
   const { redirectTo } = props;
   const [loading, setLoading] = useState(false);
   const hasDisplayedRecoveryNotification = useRef(false);
@@ -91,16 +92,27 @@ export const LoginPage = (props: { redirectTo?: string }) => {
   return (
     <div className="min-h-screen flex">
       <div className="relative grid w-full lg:grid-cols-2">
-        <div className="relative hidden h-full flex-col bg-muted p-10 text-white dark:border-r lg:flex">
-          <div className="absolute inset-0 bg-zinc-900" />
-          <div className="relative z-20 flex items-center text-lg font-medium">
-            <img className="h-6 mr-2" src={darkModeLogo} alt={title} />
+        <div className="relative hidden h-full flex-col items-center justify-center bg-muted p-10 text-white dark:border-r lg:flex">
+          {/* Urban Mining LLC brand panel */}
+          <div className="absolute inset-0 bg-[#0b3a9e]" />
+          <img
+            className="relative z-20 w-full max-w-2xl h-auto"
+            src={URBAN_MINING_LOGO_URL}
+            alt={title}
+          />
+          <div className="relative z-20 mt-6 text-sm tracking-widest uppercase text-[#e8c96a]">
             {title}
           </div>
         </div>
         <div className="flex flex-col justify-center w-full p-4 lg:p-8">
           <div className="w-full space-y-6 lg:mx-auto lg:w-[350px]">
             <div className="text-center">
+              {/* Brand logo on small screens, where the side panel is hidden */}
+              <img
+                className="lg:hidden w-full max-w-sm mx-auto mb-4 rounded-md"
+                src={URBAN_MINING_LOGO_URL}
+                alt={title}
+              />
               <h1 className="text-2xl font-semibold tracking-tight">
                 {translate("ra.auth.sign_in")}
               </h1>
