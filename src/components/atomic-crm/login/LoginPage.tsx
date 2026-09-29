@@ -94,7 +94,7 @@ export const LoginPage = (props: { redirectTo?: string }) => {
       <div className="relative grid w-full lg:grid-cols-2">
         <div className="relative hidden h-full flex-col items-center justify-center bg-muted p-10 text-white dark:border-r lg:flex">
           {/* Urban Mining LLC brand panel */}
-          <div className="absolute inset-0 bg-[#0b3a9e]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#003577] via-[#012964] to-[#011d4f]" />
           <img
             className="relative z-20 w-full max-w-2xl h-auto"
             src={URBAN_MINING_LOGO_URL}
