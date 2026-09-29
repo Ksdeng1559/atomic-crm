@@ -167,9 +167,15 @@ export const URBAN_MINING_LOGO_URL =
     ? new URL("/urban-mining-logo.jpg", window.location.origin).href
     : "/urban-mining-logo.jpg";
 
+/**
+ * Background matching the logo's own edge colours (sampled from the image),
+ * so the banner blends seamlessly when the page is wider than the logo.
+ */
+export const BRAND_BG_CLASS = "bg-gradient-to-b from-[#003577] via-[#012964] to-[#011d4f]";
+
 /** Full-width brand banner used at the top of the Capital OS dashboard. */
 export const BrandBanner = () => (
-  <div className="mb-6 overflow-hidden rounded-xl border border-[#c9a84c]/25 bg-[#0b3a9e]">
+  <div className={`mb-6 overflow-hidden rounded-xl border border-[#c9a84c]/25 ${BRAND_BG_CLASS}`}>
     <img
       src={URBAN_MINING_LOGO_URL}
       alt="Urban Mining LLC — Recovering Tomorrow's Resources Today"
