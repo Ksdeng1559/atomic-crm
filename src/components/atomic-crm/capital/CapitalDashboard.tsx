@@ -20,7 +20,7 @@ import {
   progressPct,
   weightedPipeline,
 } from "./capitalMetrics";
-import { Badge, KpiCard, OsLoading, OsPage, Panel, ProgressBar } from "./osUi";
+import { Badge, BrandBanner, KpiCard, OsLoading, OsPage, Panel, ProgressBar } from "./osUi";
 import { contactName, useCapitalData } from "./useCapitalData";
 
 const STALE_DAYS = 14;
@@ -34,6 +34,7 @@ export const CapitalDashboard = () => {
   if (data.isPending) {
     return (
       <OsPage eyebrow="Capital Raise OS" title="Capital Raise Dashboard">
+        <BrandBanner />
         <OsLoading />
       </OsPage>
     );
@@ -98,6 +99,9 @@ export const CapitalDashboard = () => {
         </>
       }
     >
+      {/* Brand banner */}
+      <BrandBanner />
+
       {/* KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <KpiCard label="Raise Target" value={formatMoney(raiseTarget, currency)} tone="gold" sub={`${raisePct}% committed`} />

@@ -157,6 +157,27 @@ export const osButtonClass =
 export const osGhostButtonClass =
   "inline-flex items-center gap-1.5 rounded-md border border-[#c9a84c]/25 px-3 py-1.5 text-xs font-semibold text-[#c9a84c] hover:bg-[#c9a84c]/10 cursor-pointer";
 
+/**
+ * Urban Mining LLC brand banner. The file lives in /public, so it is served
+ * from the site root. Built as an absolute URL (not a relative path) because
+ * relative image paths break on nested routes such as /oauth/consent.
+ */
+export const URBAN_MINING_LOGO_URL =
+  typeof window !== "undefined"
+    ? new URL("/urban-mining-logo.jpg", window.location.origin).href
+    : "/urban-mining-logo.jpg";
+
+/** Full-width brand banner used at the top of the Capital OS dashboard. */
+export const BrandBanner = () => (
+  <div className="mb-6 overflow-hidden rounded-xl border border-[#c9a84c]/25 bg-[#0b3a9e]">
+    <img
+      src={URBAN_MINING_LOGO_URL}
+      alt="Urban Mining LLC — Recovering Tomorrow's Resources Today"
+      className="mx-auto block w-full max-w-4xl h-auto"
+    />
+  </div>
+);
+
 /** Centered placeholder while data loads. */
 export const OsLoading = () => (
   <div className="py-16 text-center text-sm text-[#8a9ab0]">Loading…</div>
