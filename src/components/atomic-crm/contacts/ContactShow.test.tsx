@@ -1,0 +1,300 @@
+import {
+  ResourceContextProvider,
+  ShowBase,
+  useDataProvider,
+  type DataProvider,
+} from "ra-core";
+import { useQueryClient } from "@tanstack/react-query";
+import { render } from "vitest-browser-react";
+import { createDataProvider } from "@/components/atomic-crm/providers/fakerest";
+import { buildContact, createCrmDb, StoryWrapper } from "@/test/StoryWrapper";
+import { NoteCreateSheet } from "../notes/NoteCreateSheet";
+import { TaskCreateSheet } from "../tasks/TaskCreateSheet";
+import { ContactAside } from "./ContactAside";
+import { ContactEditSheet } from "./ContactEditSheet";
+import { ContactShow } from "./ContactShow";
+import { MobileSuccess } from "./ContactShow.mobile.stories";
+
+const mockIsMobile = vi.hoisted(() => vi.fn(() => true));
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: mockIsMobile,
+}));
+
+describe("ContactShow", () => {
+  beforeEach(() => {
+    mockIsMobile.mockReturnValue(true);
+  });
+
+  it("renders a safe zero-task label before nb_tasks is available", async () => {
+    const screen = await render(<MobileSuccess />);
+
+    await expect
+      .element(screen.getByRole("tab", { name: "0 tasks" }))
+      .toBeVisible();
+    await expect
+      .poll(
+        () => screen.container.textContent?.includes("%{smart_count}") ?? false,
+      )
+      .toBe(false);
+    await expect
+      .poll(() => screen.container.textContent?.includes("||||") ?? false)
+      .toBe(false);
+  });
+
+  it("offers search but no refresh in the header of a contact page", async () => {
+    const screen = await render(<MobileSuccess />);
+
+    await expect
+      .element(screen.getByRole("button", { name: "Search", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("button", { name: "Refresh" }))
+      .not.toBeInTheDocument();
+  });
+
+  it("opens on the tab named in the URL, as global search links to tasks", async () => {
+    const screen = await render(
+      <StoryWrapper
+        data={{ contacts: [buildContact({ id: 1 })] }}
+        initialEntries={["/?tab=tasks"]}
+      >
+        <ContactShow resource="contacts" id={1} />
+      </StoryWrapper>,
+    );
+
+    await expect
+      .element(screen.getByRole("tab", { name: "0 tasks" }))
+      .toHaveAttribute("aria-selected", "true");
+  });
+
+  it("shows the contact tasks tab after creating a task for the contact", async () => {
+    const screen = await render(
+      <StoryWrapper data={{ contacts: [buildContact({ id: 1 })] }}>
+        <TaskCreateSheet open onOpenChange={() => {}} contact_id={1} />
+      </StoryWrapper>,
+    );
+
+    await screen.getByLabelText(/description/i).fill("Call back");
+    await screen.getByRole("button", { name: /^save$/i }).click();
+
+    await expect
+      .element(screen.getByRole("tab", { name: "1 task" }))
+      .toHaveAttribute("aria-selected", "true");
+    await expect.element(screen.getByText("Call back")).toBeVisible();
+  });
+
+  it("saves a contact edit right away, without a success snackbar", async () => {
+    let dataProvider: DataProvider | null = null;
+    const DataProviderListener = () => {
+      dataProvider = useDataProvider();
+      return null;
+    };
+
+    const screen = await render(
+      <StoryWrapper
+        data={{ contacts: [buildContact({ id: 1, first_name: "Ada" })] }}
+      >
+        <DataProviderListener />
+        <ContactEditSheet open onOpenChange={() => {}} contactId={1} />
+      </StoryWrapper>,
+    );
+
+    // The form renders before the record loads, then resets to it: typing
+    // earlier gets overwritten.
+    await expect
+      .element(screen.getByLabelText(/first name/i))
+      .toHaveValue("Ada");
+    await screen.getByLabelText(/first name/i).fill("Grace");
+    await screen.getByRole("button", { name: /^save$/i }).click();
+
+    await expect
+      .poll(async () => {
+        const { data } = await dataProvider!.getOne("contacts", { id: 1 });
+        return data.first_name;
+      })
+      .toBe("Grace");
+    expect(screen.getByText("Element updated").query()).toBeNull();
+    expect(screen.getByRole("button", { name: /undo/i }).query()).toBeNull();
+  });
+
+  it("shows the new note after creating it", async () => {
+    const screen = await render(
+      <StoryWrapper
+        data={{
+          contacts: [
+            buildContact({ id: 1, first_name: "Ada", last_name: "Lovelace" }),
+          ],
+        }}
+      >
+        <NoteCreateSheet open onOpenChange={() => {}} contact_id={1} />
+      </StoryWrapper>,
+    );
+
+    await screen.getByRole("textbox").first().fill("Met at the fair");
+    await screen.getByRole("button", { name: /^save$/i }).click();
+
+    await expect
+      .element(screen.getByRole("heading", { name: "Note for Ada Lovelace" }))
+      .toBeVisible();
+    await expect.element(screen.getByText("Met at the fair")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Notes" }).query()).toBeNull();
+  });
+
+  it("stays on the note after editing it", async () => {
+    const screen = await render(
+      <StoryWrapper
+        data={{
+          contacts: [
+            buildContact({ id: 1, first_name: "Ada", last_name: "Lovelace" }),
+          ],
+          contact_notes: [
+            {
+              id: 1,
+              contact_id: 1,
+              text: "Met at the fair",
+              date: "2025-01-01T10:00:00.000Z",
+              sales_id: 0,
+              status: "warm",
+              attachments: [],
+            },
+          ],
+        }}
+        initialEntries={["/contacts/1/notes/1"]}
+      >
+        {null}
+      </StoryWrapper>,
+    );
+
+    await screen.getByRole("button", { name: "Edit note" }).click();
+    await screen.getByRole("textbox").first().fill("Met at the conference");
+    await screen.getByRole("button", { name: /^save$/i }).click();
+
+    await expect
+      .element(screen.getByText("Met at the conference"))
+      .toBeVisible();
+    await expect
+      .element(screen.getByRole("heading", { name: "Note for Ada Lovelace" }))
+      .toBeVisible();
+    expect(screen.getByRole("tab", { name: "Notes" }).query()).toBeNull();
+  });
+
+  it("links phone numbers to the dialer, keeping the extension as a pause", async () => {
+    const screen = await render(
+      <StoryWrapper
+        data={{
+          contacts: [
+            buildContact({
+              id: 1,
+              phone_jsonb: [{ number: "(263) 963-6427 x6649", type: "Work" }],
+            }),
+          ],
+        }}
+        initialEntries={["/?tab=details"]}
+      >
+        <ContactShow resource="contacts" id={1} />
+      </StoryWrapper>,
+    );
+
+    await expect
+      .element(screen.getByRole("link", { name: "(263) 963-6427 x6649" }))
+      .toHaveAttribute("href", "tel:2639636427,6649");
+  });
+
+  it("shows an error when the contact cannot be loaded", async () => {
+    const screen = await render(
+      <StoryWrapper data={{ contacts: [] }}>
+        {/* An id no other test loads, so no persisted query cache can serve it */}
+        <ContactShow resource="contacts" id={404} />
+      </StoryWrapper>,
+    );
+
+    await expect
+      .element(screen.getByText("Error loading contact"))
+      .toBeVisible();
+  });
+
+  it("keeps showing a loaded contact when refreshing it fails", async () => {
+    const contact = buildContact({ id: 405 });
+    const baseDataProvider = createDataProvider({
+      db: createCrmDb({ contacts: [contact] }),
+      silent: true,
+    });
+    let isOffline = false;
+    let refetchQueries: (() => Promise<void>) | null = null;
+
+    const QueryClientListener = () => {
+      const queryClient = useQueryClient();
+      refetchQueries = () => queryClient.refetchQueries();
+      return null;
+    };
+
+    const screen = await render(
+      <StoryWrapper
+        data={{ contacts: [contact] }}
+        dataProvider={{
+          getOne: (resource, params) =>
+            isOffline && resource === "contacts"
+              ? Promise.reject(new Error("Failed to fetch"))
+              : baseDataProvider.getOne(resource, params),
+        }}
+      >
+        <QueryClientListener />
+        <ContactShow resource="contacts" id={contact.id} />
+      </StoryWrapper>,
+    );
+    await expect
+      .element(screen.getByRole("tab", { name: "0 tasks" }))
+      .toBeVisible();
+
+    isOffline = true;
+    await refetchQueries!();
+
+    await expect
+      .element(screen.getByText("Error loading contact"))
+      .not.toBeInTheDocument();
+    await expect
+      .element(screen.getByRole("tab", { name: "0 tasks" }))
+      .toBeVisible();
+  });
+
+  it("updates the contact status from the aside", async () => {
+    mockIsMobile.mockReturnValue(false);
+
+    let dataProvider: DataProvider | null = null;
+    const contact = buildContact({ status: "warm" });
+
+    const DataProviderListener = () => {
+      dataProvider = useDataProvider();
+      return null;
+    };
+
+    const screen = await render(
+      <StoryWrapper data={{ contacts: [contact] }}>
+        <DataProviderListener />
+        <ResourceContextProvider value="contacts">
+          <ShowBase id={contact.id}>
+            <ContactAside />
+          </ShowBase>
+        </ResourceContextProvider>
+      </StoryWrapper>,
+    );
+
+    await expect
+      .element(screen.getByRole("combobox"))
+      .toHaveTextContent("Warm");
+
+    await screen.getByRole("combobox").click();
+    await screen.getByRole("option", { name: /hot/i }).click();
+
+    await expect
+      .poll(async () => {
+        const { data } = await dataProvider!.getOne("contacts", {
+          id: contact.id,
+        });
+        return data.status;
+      })
+      .toBe("hot");
+
+    await expect.element(screen.getByRole("combobox")).toHaveTextContent("Hot");
+  });
+});

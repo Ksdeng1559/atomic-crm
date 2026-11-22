@@ -1,0 +1,82 @@
+import { format } from "date-fns";
+
+import type { DealStage, LabeledValue } from "../types";
+
+export const findDealLabel = (dealStages: DealStage[], dealValue: string) => {
+  const dealStage = dealStages.find((stage) => stage.value === dealValue);
+  return dealStage?.label;
+};
+
+export const formatDealCategories = (
+  dealCategories: LabeledValue[],
+  categories: string[] | null | undefined,
+): string =>
+  (categories ?? [])
+    .map(
+      (value) => dealCategories.find((c) => c.value === value)?.label ?? value,
+    )
+    .join(", ");
+
+export function getRelativeTimeString(
+  dateString: string,
+  locale = "en",
+): string {
+  const date = new Date(dateString);
+  date.setHours(0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const diff = date.getTime() - today.getTime();
+  const unitDiff = Math.round(diff / (1000 * 60 * 60 * 24));
+
+  // Check if the date is more than one week old
+  if (Math.abs(unitDiff) > 7) {
+    return new Intl.DateTimeFormat(locale, {
+      day: "numeric",
+      month: "long",
+    }).format(date);
+  }
+
+  // Intl.RelativeTimeFormat for dates within the last week
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  return ucFirst(rtf.format(unitDiff, "day"));
+}
+
+function ucFirst(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+const isoDateStringRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+export const isISODateString = (value: unknown): value is string =>
+  typeof value === "string" && isoDateStringRegex.test(value);
+
+// Keep in sync with the deals_expected_closing_date_range check in supabase/schemas/01_tables.sql
+const MIN_CLOSING_DATE = "1900-01-01";
+const MAX_CLOSING_DATE = "2900-12-31";
+
+/**
+ * Form validator for the expected closing date, which is optional: an empty value is valid.
+ * YYYY-MM-DD strings with a 4-digit year sort like dates, so string comparison is enough.
+ */
+export const validateClosingDate = (value: unknown): string | undefined =>
+  !value ||
+  (isISODateString(value) &&
+    value >= MIN_CLOSING_DATE &&
+    value <= MAX_CLOSING_DATE)
+    ? undefined
+    : "resources.deals.invalid_date";
+
+/** Returns null for anything but a YYYY-MM-DD date, which the caller shows as invalid. */
+export function formatISODateString(dateString: string): string | null {
+  if (!isISODateString(dateString)) {
+    return null;
+  }
+  // Some browsers will consider a date in the format YYYY-MM-DD as UTC, which can cause off-by-one-day issues depending on the user's timezone.
+  // To avoid this, we can parse the date components manually and create a date object in the local timezone.
+  const [year, month, day] = dateString.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+
+  return format(date, "PP");
+}

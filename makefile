@@ -1,0 +1,187 @@
+.PHONY: build help
+
+# Run silently, show output on failure
+run-silent = $1 >/tmp/atomic-crm-$2.log 2>&1 || (cat /tmp/atomic-crm-$2.log && false)
+
+# Same but captures TTY output (for docker/supabase)
+ifeq ($(shell uname),Darwin)
+run-silent-tty = script -q /tmp/atomic-crm-$2.log $1 >/dev/null 2>&1 || (cat /tmp/atomic-crm-$2.log && false)
+else
+run-silent-tty = script -eq /dev/null -c "$1" >/tmp/atomic-crm-$2.log 2>&1 || (cat /tmp/atomic-crm-$2.log && false)
+endif
+
+help:
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+
+install: package.json ## install dependencies
+	npm install
+
+install-playwright-browsers: install ## install the playwright browsers matching the repo's pinned version
+	npx playwright install chromium chromium-headless-shell
+
+install-claude-plugins:
+	claude plugin marketplace update claude-plugins-official
+	claude plugin install typescript-lsp@claude-plugins-official
+
+install-lsp:
+	npm install -g typescript-language-server
+
+start-supabase: ## start supabase locally
+	npx supabase start
+
+start-supabase-functions: ## start the supabase Functions watcher
+	npx supabase functions serve
+
+supabase-migrate-database: ## apply the migrations to the database
+	npx supabase migration up
+
+supabase-reset-database: ## reset (and clear!) the database
+	npx supabase db reset
+
+start-app: ## start the app locally
+	npm run dev
+
+start-app-e2e: ## start the app pointing to the e2e supabase instance
+	npx vite --port 5175 --force --mode e2e &
+
+stop-app-e2e:
+	kill $$(lsof -t -i:5175)
+
+start-app-e2e-ci: config-e2e ## serve the built app (dist/, from `make build` or the CI artifact) pointing to the e2e supabase instance
+	npx serve -l 5175 -L -s dist &
+
+start: start-supabase start-app ## start the stack locally
+
+start-demo: ## start the app locally in demo mode
+	npm run dev:demo
+
+stop-supabase: ## stop local supabase
+	npx supabase stop
+
+stop: stop-supabase ## stop the stack locally
+
+start-supabase-e2e: ## start a separate supabase instance for e2e (fresh DB every run)
+	@npx supabase stop --workdir .supabase-e2e --no-backup 2>/dev/null || true
+	rm -rf .supabase-e2e/supabase
+	mkdir -p .supabase-e2e/supabase
+	cp supabase/config.e2e.toml .supabase-e2e/supabase/config.toml
+	cp -r supabase/migrations .supabase-e2e/supabase/migrations
+	cp -r supabase/schemas .supabase-e2e/supabase/schemas
+	cp -r supabase/functions .supabase-e2e/supabase/functions
+	# Edge functions reject JWTs whose issuer differs from SB_JWT_ISSUER. functions/.env sets it
+	# for the dev instance (port 54321), but e2e JWTs are issued by the e2e API (port 54341, see
+	# config.e2e.toml), so rewrite it to that port. Keep both ports in sync.
+	sed 's|^SB_JWT_ISSUER=.*|SB_JWT_ISSUER=http://127.0.0.1:54341/auth/v1|' supabase/functions/.env > .supabase-e2e/supabase/functions/.env
+	cp -r supabase/templates .supabase-e2e/supabase/templates
+	cp supabase/seed.sql .supabase-e2e/supabase/seed.sql
+	cp supabase/signing_keys.json .supabase-e2e/supabase/signing_keys.json
+	@$(call run-silent-tty,npx supabase start --workdir .supabase-e2e,supabase-e2e)
+
+stop-supabase-e2e: ## stop the e2e supabase instance
+	npx supabase stop --workdir .supabase-e2e --no-backup
+
+start-e2e: start-supabase-e2e start-app-e2e ## start the stack in e2e mode (fresh supabase instance + app pointing to it)
+
+start-e2e-ci: start-supabase-e2e start-app-e2e-ci ## start the stack in e2e mode in CI (fresh supabase instance + built app pointing to it)
+
+stop-e2e: stop-supabase-e2e stop-app-e2e ## stop the stack in e2e mode
+
+build: ## build the app
+	npm run build
+
+build-config: ## write dist/config.js from the VITE_* environment variables, or from a file with ENV_FILE=<file>
+	node $(if $(ENV_FILE),--env-file=$(ENV_FILE)) scripts/renderRuntimeConfig.ts dist/config.js
+
+build-e2e: build config-e2e ## build the app and point it to the e2e supabase instance
+
+config-e2e: ## point the built app (dist/config.js) to the e2e supabase instance
+	node --env-file=.env.e2e scripts/renderRuntimeConfig.ts dist/config.js
+
+build-demo: ## build the app in demo mode
+	npm run build:demo
+
+prod-start: build supabase-deploy
+	open http://127.0.0.1:3000 && npx serve -l tcp://127.0.0.1:3000 dist
+
+prod-deploy: build supabase-deploy
+	npm run ghpages:deploy
+
+supabase-remote-init:
+	npm run supabase:remote:init
+
+supabase-deploy:
+	npx supabase db push
+	npx supabase functions deploy
+
+test-unit: test-app test-functions 
+
+test: test-unit
+
+test-app:
+	npm run test:unit:app
+
+test-functions:
+	npm run test:unit:functions
+
+test-e2e: start-e2e
+	npx playwright test --ui
+
+test-e2e-mobile: start-e2e ## start the stack and run the e2e tests on the mobile viewport only
+	npx playwright test --ui --project="Mobile Chrome"
+
+test-e2e-ci: start-e2e-ci
+	npx wait-on http-get://localhost:54341/auth/v1/health http-get://localhost:5175
+	npx playwright test
+
+lint:
+	npm run lint
+	npm run prettier
+
+publish:
+	npm publish
+
+typecheck:
+	npm run typecheck
+
+doc-install:
+	@(cd doc && npm install)
+
+doc: doc-dev
+
+doc-dev:
+	@(cd doc && npm run dev)
+
+doc-build:
+	@(cd doc && npm run build)
+
+doc-preview: doc-build
+	@(cd doc && npm run preview)
+
+doc-deploy:
+	@(cd doc && npx gh-pages -b gh-pages -d dist -e doc -m "Deploy docs" --remove doc)
+
+registry-build: ## build the shadcn registry
+	npm run registry:build
+
+registry-deploy: registry-build ## Deploy the shadcn registry (Automatically done by CI/CD pipeline)
+	@(cd public/r && npx gh-pages -b gh-pages -d ./ -s atomic-crm.json -e r -m "Deploy registry" --remove r)
+
+registry-gen: ## Generate the shadcn registry (ran automatically by a pre-commit hook)
+	npm run registry:gen
+	npx prettier --config ./.prettierrc.json --write "registry.json"
+
+update-changelog: ## Update the changelog with the unreleased changes (ran automatically by a pre-commit hook)
+	npm run update-changelog
+	npx prettier --config ./.prettierrc.json --write "CHANGELOG.md"
+
+storybook: ## start storybook
+	npm run storybook
+
+watch: ## live monitor of the most recent agent session (agents, hooks, diagnosis)
+	node scripts/harness-monitor.mjs --watch
+
+monitor: ## one-shot summary of the most recent agent session (pass SESSION=<id> to pick one)
+	@node scripts/harness-monitor.mjs $(if $(SESSION),--session $(SESSION),)
+
+sessions: ## list known agent sessions, newest first
+	@node scripts/harness-monitor.mjs --list

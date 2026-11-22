@@ -1,0 +1,113 @@
+---
+title: Migrations
+description: This document explains how to create and manage database migrations in Atomic CRM.
+---
+
+Atomic CRM uses [declarative database schemas](https://supabase.com/docs/guides/local-development/declarative-database-schemas) to manage its database structure. The schema is defined in `.sql` files under `supabase/schemas/`, and migrations are auto-generated from those files.
+
+## Schema Files
+
+The `supabase/schemas/` directory contains the **source of truth** for the database structure:
+
+<style>
+    {`
+    .sl-markdown-content table {
+        font-size: 1rem;
+        display: table;
+        width: 100%;
+    }
+    `}
+</style>
+| File | Contents |
+|------|----------|
+| `01_tables.sql` | Tables, foreign keys, indexes, extensions |
+| `02_functions.sql` | All PL/pgSQL functions |
+| `03_views.sql` | Views (`contacts_summary`, `companies_summary`, `activity_log`, `init_state`) |
+| `04_triggers.sql` | All triggers (public tables + auth.users) |
+| `05_policies.sql` | Row Level Security policies |
+| `06_grants.sql` | Grants and default privileges |
+| `07_storage.sql` | Storage bucket policies |
+
+Files are numbered to control load order (tables must exist before functions that reference them).
+
+:::caution
+Migration files in `supabase/migrations/` are auto-generated from the schema files. In most cases, you should not edit them directly. However, there are exceptions: for example, `db diff` may generate a DROP + CREATE for a column rename instead of an ALTER TABLE RENAME. In such cases, manually edit the migration to use the correct statement, while keeping it coherent with the schema files.
+:::
+
+## Working With a Local Database
+
+When developing locally with `make start`, Supabase runs a local PostgreSQL instance. There are two ways to make schema changes locally.
+
+### Option A: Edit Schema Files
+
+1. **Edit the relevant schema file** in `supabase/schemas/`. For example, to add a column to the `contacts` table, edit `01_tables.sql`.
+
+2. **Generate a migration** from your changes:
+
+```sh
+npx supabase db diff --local -f <migration_name>
+```
+
+This compares the schema files against the local database and generates a migration file in `supabase/migrations/`.
+
+3. **Review the generated migration** in `supabase/migrations/`. In most cases it will be correct, but sometimes you may need to adjust it. For example, if you renamed a column, `db diff` may generate a DROP + CREATE instead of an `ALTER TABLE ... RENAME COLUMN`. Edit the migration file to use the correct statement, while keeping it coherent with the schema file.
+
+4. **Apply the migration** locally:
+
+```sh
+npx supabase migration up --local
+```
+
+5. **Verify** the diff is clean (no remaining differences):
+
+```sh
+npx supabase db diff --local
+```
+
+This should output "No schema changes found".
+
+### Option B: Use Supabase Studio
+
+You can modify the schema using the local Supabase Dashboard (Studio) at http://localhost:54323/. When working on a local database, Studio automatically creates a migration for each change you make.
+
+After making your changes in Studio, update the relevant schema files in `supabase/schemas/` to match, so they remain the source of truth. You can inspect the current state with:
+
+```sh
+npx supabase db dump --local --schema public
+```
+
+## Working With a Remote Database
+
+To apply schema changes to the remote (hosted) Supabase database, push the migrations generated locally:
+
+```sh
+npx supabase db push
+```
+
+This applies any pending migrations from `supabase/migrations/` to the remote database.
+
+If you make schema changes directly on the remote database via the hosted Supabase Studio, those changes won't be reflected in the local schema files or migration history. To re-sync, pull the remote schema and update your local files:
+
+```sh
+npx supabase db pull
+```
+
+This generates a new migration matching the remote state. Then update the relevant schema files in `supabase/schemas/` to match.
+
+## Editing Functions
+
+Function definitions in `02_functions.sql` must use the exact format that PostgreSQL stores internally (quoted identifiers, specific indentation). Otherwise, `db diff` will show phantom changes on every run.
+
+After editing a function, if `db diff` shows an unexpected `CREATE OR REPLACE FUNCTION` in its output, run:
+
+```sh
+npx supabase db dump --local --schema public
+```
+
+Then copy the function's exact format from the dump output into `02_functions.sql`.
+
+## Updating The Import Feature
+
+From the frontend UI, users can import contacts and companies via a csv file.
+
+If you change the data structure for a contact, don't forget to modify the sample CSV file located at [`src/components/atomic-crm/contacts/contacts_export.csv`](https://github.com/marmelab/atomic-crm/blob/main/src/components/atomic-crm/contacts/contacts_export.csv). You'll also need to modify the import function found in [`src/components/atomic-crm/contacts/useContactImport.tsx`](https://github.com/marmelab/atomic-crm/blob/main/src/components/atomic-crm/contacts/useContactImport.tsx).

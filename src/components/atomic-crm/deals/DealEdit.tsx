@@ -1,0 +1,89 @@
+import {
+  EditBase,
+  Form,
+  useEditContext,
+  useNotify,
+  useRecordContext,
+  useRedirect,
+  useTranslate,
+} from "ra-core";
+import { Link } from "react-router";
+import { DeleteButton } from "@/components/admin/delete-button";
+import { ReferenceField } from "@/components/admin/reference-field";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+
+import { FormToolbar } from "../layout/FormToolbar";
+import { CompanyAvatar } from "../companies/CompanyAvatar";
+import type { Deal } from "../types";
+import { DealInputs } from "./DealInputs";
+
+export const DealEdit = ({ open, id }: { open: boolean; id?: string }) => {
+  const redirect = useRedirect();
+  const notify = useNotify();
+
+  const handleClose = () => {
+    redirect("/deals", undefined, undefined, undefined, {
+      _scrollToTop: false,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={() => handleClose()}>
+      <DialogContent className="lg:max-w-4xl overflow-y-auto max-h-9/10 top-1/20 translate-y-0">
+        {id ? (
+          <EditBase
+            id={id}
+            mutationMode="pessimistic"
+            mutationOptions={{
+              onSuccess: () => {
+                notify("resources.deals.updated", {});
+                redirect(`/deals/${id}/show`, undefined, undefined, undefined, {
+                  _scrollToTop: false,
+                });
+              },
+            }}
+          >
+            <EditHeader />
+            <Form>
+              <DealInputs />
+              <FormToolbar />
+            </Form>
+          </EditBase>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+function EditHeader() {
+  const translate = useTranslate();
+  const { defaultTitle } = useEditContext<Deal>();
+  const deal = useRecordContext<Deal>();
+  if (!deal) {
+    return null;
+  }
+
+  return (
+    <DialogTitle className="pb-0">
+      <div className="flex justify-between items-start">
+        <div className="flex items-center gap-4">
+          <ReferenceField source="company_id" reference="companies" link="show">
+            <CompanyAvatar />
+          </ReferenceField>
+          <h2 className="text-xl font-semibold">{defaultTitle}</h2>
+        </div>
+        <div className="flex gap-2 pr-12">
+          <DeleteButton />
+          <Link
+            to={`/deals/${deal.id}/show`}
+            className={cn(buttonVariants({ variant: "outline" }), "h-9")}
+          >
+            {translate("resources.deals.action.back_to_deal")}
+          </Link>
+        </div>
+      </div>
+    </DialogTitle>
+  );
+}

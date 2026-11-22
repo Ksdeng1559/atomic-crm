@@ -1,0 +1,170 @@
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { CheckCircle, Circle, Plus } from "lucide-react";
+import type { Identifier } from "ra-core";
+import { useCreatePath, useTranslate } from "ra-core";
+import { useState } from "react";
+import { Link } from "react-router";
+
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
+import { ContactCreateSheet } from "../contacts/ContactCreateSheet";
+import { DataImportButton } from "../dataImport/DataImportButton";
+import useAppBarHeight from "../misc/useAppBarHeight";
+import { NoteCreateSheet } from "../notes/NoteCreateSheet";
+
+export const DashboardStepper = ({
+  step,
+  contactId,
+}: {
+  step: number;
+  contactId?: Identifier;
+}) => {
+  const translate = useTranslate();
+  const createPath = useCreatePath();
+  const appbarHeight = useAppBarHeight();
+  const isMobile = useIsMobile();
+  const [contactCreateOpen, setContactCreateOpen] = useState(false);
+  const [noteCreateOpen, setNoteCreateOpen] = useState(false);
+  const addContactLabel = translate("resources.contacts.action.add", {
+    _: "Add contact",
+  });
+  return (
+    <>
+      <ContactCreateSheet
+        open={contactCreateOpen}
+        onOpenChange={setContactCreateOpen}
+      />
+      <NoteCreateSheet
+        open={noteCreateOpen}
+        onOpenChange={setNoteCreateOpen}
+        contact_id={contactId}
+      />
+      <div
+        className="flex justify-center items-center"
+        style={{
+          height: isMobile ? undefined : `calc(100dvh - ${appbarHeight}px)`,
+        }}
+      >
+        <Card className="w-full max-w-[600px]">
+          <CardContent className="px-6">
+            <div className="flex flex-wrap items-center justify-between gap-y-4 mb-8">
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-bold">
+                  {translate("crm.dashboard.stepper.whats_next", {
+                    _: "What's next?",
+                  })}
+                </h3>
+                <DataImportButton />
+              </div>
+              <div className="w-[150px]">
+                <Progress value={(step / 3) * 100} className="mb-2" />
+                <div className="text-right text-sm">
+                  {translate("crm.dashboard.stepper.progress", {
+                    _: `${step}/3 done`,
+                    step,
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col gap-12">
+              <div className="flex gap-8 items-center">
+                <CheckCircle className="text-green-600 w-5 h-5 shrink-0" />
+                <h4 className="font-bold">
+                  {translate("crm.dashboard.stepper.install", {
+                    _: "Install Atomic CRM",
+                  })}
+                </h4>
+              </div>
+              <div className="flex gap-8 items-start">
+                {step > 1 ? (
+                  <CheckCircle className="text-green-600 w-5 h-5 mt-1 shrink-0" />
+                ) : (
+                  <Circle className="text-muted-foreground w-5 h-5 mt-1 shrink-0" />
+                )}
+
+                <div className="flex flex-col gap-4">
+                  <h4 className="font-bold">
+                    {translate("resources.contacts.action.add_first", {
+                      _: "Add your first contact",
+                    })}
+                  </h4>
+
+                  <div className="flex gap-8">
+                    {isMobile ? (
+                      <Button
+                        onClick={() => setContactCreateOpen(true)}
+                        className="w-fit gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {addContactLabel}
+                      </Button>
+                    ) : (
+                      <Link
+                        to={createPath({
+                          resource: "contacts",
+                          type: "create",
+                        })}
+                        className={buttonVariants({ className: "w-fit" })}
+                      >
+                        {addContactLabel}
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-8 items-start">
+                <Circle className="text-muted-foreground w-5 h-5 mt-1 shrink-0" />
+                <div className="flex flex-col gap-4">
+                  <h4 className="font-bold">
+                    {translate("resources.notes.action.add_first", {
+                      _: "Add your first note",
+                    })}
+                  </h4>
+                  <p>
+                    {translate("resources.notes.stepper.hint", {
+                      _: "Go to a contact page and add a note",
+                    })}
+                  </p>
+                  {isMobile ? (
+                    <Button
+                      onClick={() => setNoteCreateOpen(true)}
+                      disabled={step < 2}
+                      className="w-fit gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      {translate("resources.notes.action.add", {
+                        _: "Add note",
+                      })}
+                    </Button>
+                  ) : (
+                    <Link
+                      to={createPath({
+                        resource: "contacts",
+                        type: "show",
+                        id: contactId,
+                      })}
+                      aria-disabled={step < 2 || undefined}
+                      tabIndex={step < 2 ? -1 : undefined}
+                      className={buttonVariants({
+                        className: cn(
+                          "w-fit",
+                          step < 2 && "pointer-events-none opacity-50",
+                        ),
+                      })}
+                    >
+                      {translate("resources.notes.action.add", {
+                        _: "Add note",
+                      })}
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </>
+  );
+};

@@ -1,0 +1,8 @@
+{
+    "*.{mjs,ts,tsx}": [
+        "eslint --fix --max-warnings 0 --no-warn-ignored"
+    ],
+    "*.{mjs,js,json,ts,tsx,css,md,html}": [
+        "prettier --config ./.prettierrc.json --write --list-different"
+    ]
+}

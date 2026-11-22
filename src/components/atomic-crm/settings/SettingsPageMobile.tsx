@@ -1,0 +1,653 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTheme } from "@/components/admin/use-theme";
+import { ChevronRight, KeyRound } from "lucide-react";
+import { Link } from "react-router";
+import { Button } from "@/components/ui/button";
+import {
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemActions,
+  ItemGroup,
+  ItemSeparator,
+} from "@/components/ui/item";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Check, Copy, LogOut, Moon, Smartphone, Sun } from "lucide-react";
+import {
+  email,
+  Form,
+  Translate,
+  useAuthProvider,
+  useDataProvider,
+  useGetIdentity,
+  useGetOne,
+  useLocaleState,
+  useLocales,
+  useLogout,
+  useNotify,
+  useTranslate,
+} from "ra-core";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+import { MobileContent } from "../layout/MobileContent";
+import MobileHeader from "../layout/MobileHeader";
+import { ChangelogPage } from "../misc/ChangelogPage";
+import ImageEditorField from "../misc/ImageEditorField";
+import type { CrmDataProvider } from "../providers/types";
+import { config } from "../root/config";
+import { getSalesErrorNotification } from "../sales/salesErrorNotification";
+import type { SalesFormData } from "../types";
+
+const ChangePasswordButton = () => {
+  const translate = useTranslate();
+  const notify = useNotify();
+  const { identity } = useGetIdentity();
+  const dataProvider = useDataProvider<CrmDataProvider>();
+
+  const { mutate: updatePassword } = useMutation({
+    mutationKey: ["updatePassword"],
+    mutationFn: async () => {
+      if (!identity) {
+        throw new Error(
+          translate("crm.profile.record_not_found", {
+            _: "Record not found",
+          }),
+        );
+      }
+      return dataProvider.updatePassword(identity.id);
+    },
+    onSuccess: () => {
+      notify("crm.profile.password_reset_sent", {
+        messageArgs: {
+          _: "A reset password email has been sent to your email address",
+        },
+      });
+    },
+    onError: (e) => {
+      notify(`${e}`, { type: "error" });
+    },
+  });
+
+  return (
+    <Button
+      variant="outline"
+      className="w-full h-12 text-base"
+      onClick={() => updatePassword()}
+    >
+      <KeyRound className="size-5 mr-3" />
+      {translate("crm.profile.password.change")}
+    </Button>
+  );
+};
+
+export const SettingsPageMobile = () => {
+  const translate = useTranslate();
+  const authProvider = useAuthProvider();
+  const logout = useLogout();
+
+  if (!authProvider) return null;
+
+  return (
+    <>
+      <MobileHeader>
+        <h1 className="text-xl font-semibold">
+          {translate("crm.settings.title")}
+        </h1>
+      </MobileHeader>
+      <MobileContent>
+        <div className="flex flex-col min-h-[calc(100dvh-4.5rem-6rem)]">
+          <div className="space-y-6">
+            <ProfileSection />
+            <PreferencesSection />
+            <InboundEmailSection />
+            <McpServerSection />
+            <AboutSection />
+          </div>
+
+          <div className="mt-auto pt-6 space-y-3">
+            <ChangePasswordButton />
+            <Button
+              variant="destructive"
+              className="w-full h-12 text-base"
+              onClick={() => logout()}
+            >
+              <LogOut className="size-5 mr-3" />
+              <Translate i18nKey="ra.auth.logout">Log out</Translate>
+            </Button>
+          </div>
+        </div>
+      </MobileContent>
+    </>
+  );
+};
+
+SettingsPageMobile.path = "/settings";
+
+// A bordered list of rows split by separators: ItemGroup's own gap and the
+// separators' margin would leave empty space under every row.
+const SettingsGroup = ({ children }: { children: React.ReactNode }) => (
+  <ItemGroup className="gap-0! rounded-lg border overflow-hidden *:data-[slot=item-separator]:my-0">
+    {children}
+  </ItemGroup>
+);
+
+const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1 mb-1.5">
+    {children}
+  </p>
+);
+
+const ProfileSection = () => {
+  const { identity, refetch: refetchIdentity } = useGetIdentity();
+  const { data, refetch: refetchUser } = useGetOne("sales", {
+    id: identity?.id,
+  });
+  const translate = useTranslate();
+  const notify = useNotify();
+  const dataProvider = useDataProvider<CrmDataProvider>();
+  const queryClient = useQueryClient();
+
+  const saveField = useCallback(
+    async (field: string, value: string | string[]) => {
+      if (!identity || !data) return;
+      const current = data[field as keyof typeof data];
+      if (JSON.stringify(value) === JSON.stringify(current)) return;
+
+      const queryKey = [
+        "sales",
+        "getOne",
+        { id: String(identity.id), meta: undefined },
+      ];
+      queryClient.setQueryData(queryKey, (old: any) =>
+        old ? { ...old, [field]: value } : old,
+      );
+
+      try {
+        await dataProvider.salesUpdate(identity.id, {
+          ...data,
+          [field]: value,
+        } as SalesFormData);
+        refetchIdentity();
+        refetchUser();
+      } catch (error) {
+        await refetchUser();
+        refetchIdentity();
+        const { message, args } = getSalesErrorNotification(error);
+        notify(message, {
+          type: "error",
+          messageArgs: { ...args, _: "An error occurred. Please try again" },
+        });
+      }
+    },
+    [
+      identity,
+      data,
+      dataProvider,
+      refetchIdentity,
+      refetchUser,
+      notify,
+      queryClient,
+    ],
+  );
+
+  const handleAvatarUpdate = useCallback(
+    async (values: SalesFormData) => {
+      if (!data) return;
+      try {
+        await dataProvider.salesUpdate(data.id, values);
+        refetchIdentity();
+        refetchUser();
+      } catch {
+        notify("crm.profile.update_error", {
+          type: "error",
+          messageArgs: { _: "An error occurred. Please try again." },
+        });
+      }
+    },
+    [data, dataProvider, refetchIdentity, refetchUser, notify],
+  );
+
+  if (!identity || !data) return null;
+
+  return (
+    <div>
+      <SectionLabel>
+        {translate("crm.profile.title", { _: "Profile" })}
+      </SectionLabel>
+      <SettingsGroup>
+        <Form record={data}>
+          <Item size="sm">
+            <ItemContent>
+              <ImageEditorField
+                source="avatar"
+                type="avatar"
+                onSave={handleAvatarUpdate}
+                linkPosition="right"
+              />
+            </ItemContent>
+          </Item>
+        </Form>
+
+        <ItemSeparator />
+
+        <InlineEditRow
+          label={translate("resources.sales.fields.first_name")}
+          value={data.first_name ?? ""}
+          onSave={(v) => saveField("first_name", v)}
+        />
+
+        <ItemSeparator />
+
+        <InlineEditRow
+          label={translate("resources.sales.fields.last_name")}
+          value={data.last_name ?? ""}
+          onSave={(v) => saveField("last_name", v)}
+        />
+
+        <ItemSeparator />
+
+        <InlineEditRow
+          label={translate("resources.sales.fields.email")}
+          value={data.email ?? ""}
+          onSave={(v) => saveField("email", v)}
+          type="email"
+        />
+
+        <SecondaryEmailRows
+          emails={data.secondary_emails ?? []}
+          onSave={(emails) => saveField("secondary_emails", emails)}
+        />
+      </SettingsGroup>
+      <p className="text-xs text-muted-foreground px-1 mt-1.5">
+        {translate("crm.profile.secondary_emails_help")}
+      </p>
+    </div>
+  );
+};
+
+const validateEmail = email();
+
+const SecondaryEmailRows = ({
+  emails,
+  onSave,
+}: {
+  emails: string[];
+  onSave: (emails: string[]) => void;
+}) => {
+  const translate = useTranslate();
+  const notify = useNotify();
+  const label = translate("resources.sales.fields.secondary_email");
+
+  const saveValidated = useCallback(
+    (value: string, nextEmails: string[]) => {
+      if (value && validateEmail(value, {})) {
+        notify("crm.profile.secondary_email_invalid", {
+          type: "error",
+          messageArgs: { email: value },
+        });
+        return;
+      }
+      onSave(nextEmails);
+    },
+    [notify, onSave],
+  );
+
+  return (
+    <>
+      {emails.map((email, index) => (
+        <Fragment key={index}>
+          <ItemSeparator />
+          <InlineEditRow
+            label={`${label} ${index + 1}`}
+            value={email}
+            type="email"
+            onSave={(value) =>
+              saveValidated(
+                value,
+                value
+                  ? emails.map((current, i) => (i === index ? value : current))
+                  : emails.filter((_, i) => i !== index),
+              )
+            }
+          />
+        </Fragment>
+      ))}
+      <ItemSeparator />
+      <InlineEditRow
+        key={`add-${emails.length}`}
+        label={translate("crm.profile.add_secondary_email")}
+        value=""
+        type="email"
+        onSave={(value) => saveValidated(value, [...emails, value])}
+      />
+    </>
+  );
+};
+
+const InlineEditRow = ({
+  label,
+  value,
+  onSave,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onSave: (value: string) => void;
+  type?: string;
+}) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setEditValue(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (isEditing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [isEditing]);
+
+  const handleSave = useCallback(() => {
+    setIsEditing(false);
+    const trimmed = editValue.trim();
+    if (trimmed !== value) {
+      onSave(trimmed);
+    }
+  }, [editValue, value, onSave]);
+
+  const handleCancel = useCallback(() => {
+    setEditValue(value);
+    setIsEditing(false);
+  }, [value]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        inputRef.current?.blur();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        handleCancel();
+      }
+    },
+    [handleCancel],
+  );
+
+  if (isEditing) {
+    return (
+      <Item size="sm">
+        <ItemContent>
+          <ItemTitle className="font-normal text-muted-foreground">
+            {label}
+          </ItemTitle>
+        </ItemContent>
+        <ItemActions>
+          <input
+            ref={inputRef}
+            type={type}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={handleSave}
+            onKeyDown={handleKeyDown}
+            className="bg-transparent text-right !text-base outline-none w-48"
+          />
+        </ItemActions>
+      </Item>
+    );
+  }
+
+  return (
+    <Item
+      size="sm"
+      className="cursor-pointer"
+      onClick={() => setIsEditing(true)}
+    >
+      <ItemContent>
+        <ItemTitle className="font-normal text-muted-foreground">
+          {label}
+        </ItemTitle>
+      </ItemContent>
+      <ItemActions>
+        <span className="min-h-6 text-base">{value}</span>
+      </ItemActions>
+    </Item>
+  );
+};
+
+const PreferencesSection = () => {
+  const translate = useTranslate();
+
+  return (
+    <div>
+      <SectionLabel>
+        {translate("crm.settings.preferences", { _: "Preferences" })}
+      </SectionLabel>
+      <SettingsGroup>
+        <LanguageRow />
+        <ItemSeparator />
+        <ThemeRow />
+      </SettingsGroup>
+    </div>
+  );
+};
+
+const LanguageRow = () => {
+  const translate = useTranslate();
+  const locales = useLocales();
+  const [locale, setLocale] = useLocaleState();
+
+  if (locales.length <= 1) return null;
+
+  const localeItems = locales.map(({ locale, name }) => ({
+    value: locale,
+    label: name,
+  }));
+
+  return (
+    <Item size="sm">
+      <ItemContent>
+        <ItemTitle className="font-normal text-muted-foreground">
+          {translate("crm.language")}
+        </ItemTitle>
+      </ItemContent>
+      <ItemActions>
+        <Select
+          value={locale}
+          onValueChange={(value) => value && setLocale(value)}
+          items={localeItems}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-auto !h-auto py-0 pr-0 border-none shadow-none text-base"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {locales.map((language) => (
+              <SelectItem key={language.locale} value={language.locale}>
+                {language.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </ItemActions>
+    </Item>
+  );
+};
+
+const ThemeRow = () => {
+  const translate = useTranslate();
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <Item size="sm" className="flex-col items-stretch gap-2">
+      <ItemTitle className="font-normal text-muted-foreground">
+        {translate("crm.theme.label", { _: "Theme" })}
+      </ItemTitle>
+      <ToggleGroup
+        value={theme ? [theme] : []}
+        onValueChange={([value]) =>
+          value && setTheme(value as "light" | "dark" | "system")
+        }
+        size="lg"
+        variant="outline"
+        spacing={0}
+        className="w-full"
+      >
+        <ToggleGroupItem
+          value="system"
+          aria-label={translate("crm.theme.system")}
+          className="flex-1 gap-2"
+        >
+          <Smartphone className="size-4" />
+          {translate("crm.theme.system")}
+        </ToggleGroupItem>
+        <ToggleGroupItem
+          value="light"
+          aria-label={translate("crm.theme.light")}
+          className="flex-1 gap-2"
+        >
+          <Sun className="size-4" />
+          {translate("crm.theme.light")}
+        </ToggleGroupItem>
+        <ToggleGroupItem
+          value="dark"
+          aria-label={translate("crm.theme.dark")}
+          className="flex-1 gap-2"
+        >
+          <Moon className="size-4" />
+          {translate("crm.theme.dark")}
+        </ToggleGroupItem>
+      </ToggleGroup>
+    </Item>
+  );
+};
+
+const InboundEmailSection = () => {
+  const translate = useTranslate();
+
+  if (!config.inboundEmail) return null;
+
+  return (
+    <div>
+      <SectionLabel>{translate("crm.profile.inbound.title")}</SectionLabel>
+      <p className="text-sm text-muted-foreground mb-2 px-1">
+        {translate("crm.profile.inbound.description", {
+          _: "You can start sending emails to your server's inbound email address, e.g. by adding it to the Cc: field. Atomic CRM will process the emails and add notes to the corresponding contacts.",
+          field: "Cc:",
+        })}
+      </p>
+      <SettingsGroup>
+        <CopyPasteRow value={config.inboundEmail} />
+      </SettingsGroup>
+    </div>
+  );
+};
+
+const McpServerSection = () => {
+  const translate = useTranslate();
+
+  return (
+    <div>
+      <SectionLabel>
+        {translate("crm.profile.mcp.title", { _: "MCP Server" })}
+      </SectionLabel>
+      <p className="text-sm text-muted-foreground mb-2 px-1">
+        {translate("crm.profile.mcp.description", {
+          _: "Use this URL to connect your AI assistant to your CRM data via the Model Context Protocol (MCP).",
+        })}
+      </p>
+      <SettingsGroup>
+        <CopyPasteRow value={`${config.supabaseUrl}/functions/v1/mcp`} />
+      </SettingsGroup>
+    </div>
+  );
+};
+
+const AboutSection = () => {
+  const translate = useTranslate();
+
+  return (
+    <div>
+      <SectionLabel>{translate("crm.settings.about")}</SectionLabel>
+      <SettingsGroup>
+        <Item
+          size="sm"
+          className="cursor-pointer"
+          render={<Link to={ChangelogPage.path} />}
+        >
+          <ItemContent>
+            <ItemTitle className="font-normal">
+              {translate("crm.changelog.title")}
+            </ItemTitle>
+          </ItemContent>
+          <ItemActions>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </ItemActions>
+        </Item>
+      </SettingsGroup>
+    </div>
+  );
+};
+
+const CopyPasteRow = ({ value }: { value: string }) => {
+  const translate = useTranslate();
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    setCopied(true);
+    navigator.clipboard.writeText(value);
+    setTimeout(() => {
+      setCopied(false);
+    }, 1500);
+  };
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Item
+              size="sm"
+              className="cursor-pointer flex-nowrap"
+              onClick={handleCopy}
+            />
+          }
+        >
+          <ItemContent className="overflow-hidden">
+            <ItemTitle className="font-normal truncate">{value}</ItemTitle>
+          </ItemContent>
+          <ItemActions className="shrink-0">
+            {copied ? (
+              <Check className="size-4 text-muted-foreground" />
+            ) : (
+              <Copy className="size-4 text-muted-foreground" />
+            )}
+          </ItemActions>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>
+            {copied
+              ? translate("crm.common.copied")
+              : translate("crm.common.copy")}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+};

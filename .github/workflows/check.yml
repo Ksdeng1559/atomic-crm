@@ -1,0 +1,164 @@
+name: ✅ Check
+on:
+    push:
+        branches:
+            - main
+            - '1.*'
+    pull_request:
+        types:
+            - opened
+            - reopened
+            - synchronize
+            - ready_for_review
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: write
+    checks: write
+
+jobs:
+    lint:
+        name: 🔬 ESLint
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        if: ${{ !github.event.pull_request.draft || github.event_name == 'push' }}
+        steps:
+            - name: 📥 Checkout repo
+              uses: actions/checkout@v7
+
+            - name: ⚙️ Setup node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - name: 📥 Download deps
+              run: npm ci
+
+            - name: 🔬 Lint
+              uses: wearerequired/lint-action@548d8a7c4b04d3553d32ed5b6e91eb171e10e7bb # v2
+              with:
+                  eslint: true
+                  eslint_args: "--max-warnings 0 **/*.{mjs,ts,tsx}"
+                  prettier: true
+                  prettier_args: "--config ./.prettierrc.json \"**/*.{js,json,ts,tsx,css,md,html}\""
+
+
+    typecheck:
+        name: 🏷️ Typecheck
+        timeout-minutes: 10
+        runs-on: ubuntu-latest
+        if: ${{ !github.event.pull_request.draft || github.event_name == 'push' }}
+        steps:
+            - name: 📥 Checkout repo
+              uses: actions/checkout@v7
+
+            - name: ⚙️ Setup node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - name: 📥 Download deps
+              run: npm ci
+
+            - name: 🏷️ Typecheck
+              run: npm run typecheck
+
+    test-app:
+        name: 🔎 Test
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        if: ${{ !github.event.pull_request.draft || github.event_name == 'push' }}
+        steps:
+            - name: 📥 Checkout repo
+              uses: actions/checkout@v7
+
+            - name: ⚙️ Setup node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - name: 📥 Download deps
+              run: npm ci
+
+            - name: 🎭 Install Playwright browsers
+              run: npx playwright install chromium-headless-shell 1>/dev/null
+
+            - name: 🔎 Unit Tests on App
+              run: CI=1 npm run test:unit:app -- --run
+            - name: 🔎 Unit Tests on Supabase functions
+              run: CI=1 npm run test:unit:functions -- --run
+
+    e2e-test:
+      timeout-minutes: 10
+      runs-on: ubuntu-latest
+      needs: build
+      steps:
+      - name: 📥 Checkout repo
+        uses: actions/checkout@v7
+
+      - name: ⚙️ Setup node
+        uses: actions/setup-node@v7
+        with:
+            node-version: 24
+            cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: 📥 Download app build
+        uses: actions/download-artifact@v8
+        with:
+            name: app-dist
+            path: dist
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium-headless-shell 1>/dev/null
+      - name: Install wait-on and serve
+        run: npm install -g wait-on serve
+      - name: Run Playwright tests
+        run: make test-e2e-ci
+
+    build:
+        name: 🔨 Build
+        timeout-minutes: 10
+        runs-on: ubuntu-latest
+        if: ${{ !github.event.pull_request.draft || github.event_name == 'push' }}
+        steps:
+            - name: 📥 Checkout repo
+              uses: actions/checkout@v7
+
+            - name: ⚙️ Setup node
+              uses: actions/setup-node@v7
+              with:
+                  node-version: 24
+                  cache: npm
+
+            - name: 📥 Download deps
+              run: npm ci
+
+            # Before the app: its build empties dist/, where the demo build drops stats.html.
+            - name: 🔨 Build (demo)
+              run: npm run build:demo -- --outDir dist-demo
+
+            - name: 🔨 Build
+              run: npm run build
+
+            # deploy.yml ships these builds once this workflow passed on main.
+            - name: 📤 Upload app build
+              uses: actions/upload-artifact@v7
+              with:
+                  name: app-dist
+                  path: dist
+                  retention-days: 7
+                  if-no-files-found: error
+
+            - name: 📤 Upload demo build
+              uses: actions/upload-artifact@v7
+              with:
+                  name: demo-dist
+                  path: dist-demo
+                  retention-days: 7
+                  if-no-files-found: error

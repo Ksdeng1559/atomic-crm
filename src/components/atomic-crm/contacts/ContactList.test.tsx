@@ -1,0 +1,294 @@
+import { render } from "vitest-browser-react";
+import { page } from "vitest/browser";
+
+import {
+  AdminAccountManagerFilter,
+  DesktopEmpty,
+  DesktopSuccess,
+  DesktopLoading,
+  DesktopError,
+  BulkTagButton,
+  NonAdminAccountManagerFilter,
+} from "./ContactList.stories";
+import {
+  MobileSuccess,
+  MobileWithNameSearch,
+} from "./ContactList.mobile.stories";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("ContactList", () => {
+  it("renders an invite to create the first contact when the app is empty", async () => {
+    const screen = await render(<DesktopEmpty />);
+    await expect
+      .element(screen.getByRole("heading", { name: "No contacts found" }))
+      .toBeInTheDocument();
+    await expect
+      .element(screen.getByText("It seems your contact list is empty."))
+      .toBeVisible();
+  });
+
+  it("renders contacts in a list", async () => {
+    const screen = await render(<DesktopSuccess />);
+
+    await expect.element(screen.getByText("Ada Lovelace")).toBeVisible();
+    await expect.element(screen.getByText("Grace Hopper")).toBeVisible();
+    await expect
+      .element(screen.getByRole("heading", { name: "No contacts found" }))
+      .not.toBeInTheDocument();
+  });
+
+  /**
+   * The desktop version doesn't show a skeleton yet
+   */
+  it.skip("renders a skeleton while loading", async () => {
+    const screen = await render(<DesktopLoading />);
+
+    await expect
+      .poll(() => screen.container.querySelector('[data-slot="skeleton"]'))
+      .not.toBeNull();
+  });
+
+  it("renders an error notification when loading contacts fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const screen = await render(<DesktopError />);
+
+    await expect
+      .element(screen.getByText("Error loading contacts"))
+      .toBeVisible();
+  });
+
+  it("shows the bulk tag button only after selecting contacts", async () => {
+    const screen = await render(<BulkTagButton />);
+
+    await expect
+      .element(screen.getByRole("button", { name: /^tag$/i }))
+      .not.toBeInTheDocument();
+
+    await expect
+      .poll(() => getSelectionCheckboxes(screen.container).length)
+      .toBe(2);
+
+    const [selectionCheckbox] = getSelectionCheckboxes(screen.container);
+    await selectionCheckbox.click();
+
+    await expect
+      .element(screen.getByRole("button", { name: /^tag$/i }))
+      .toBeVisible();
+  });
+
+  it("adds an existing tag to selected contacts without duplicating it", async () => {
+    const screen = await render(<BulkTagButton />);
+
+    await expect
+      .poll(() => getSelectionCheckboxes(screen.container).length)
+      .toBe(2);
+
+    const checkboxes = getSelectionCheckboxes(screen.container);
+    await checkboxes[0].click();
+    await checkboxes[1].click();
+
+    await screen.getByRole("button", { name: /^tag$/i }).click();
+    await screen.getByRole("button", { name: "VIP" }).click();
+
+    await expect
+      .element(screen.getByText("Tag added to 1 contact"))
+      .toBeInTheDocument();
+    await expect
+      .poll(() => screen.getByText("VIP").all().length)
+      .toBeGreaterThanOrEqual(2);
+    // close the notification
+    await screen.getByRole("button", { name: /close/i }).click();
+  });
+
+  it("removes a tag from selected contacts when they all already have it", async () => {
+    const screen = await render(<BulkTagButton />);
+
+    await expect
+      .poll(() => getSelectionCheckboxes(screen.container).length)
+      .toBe(2);
+
+    const checkboxes = getSelectionCheckboxes(screen.container);
+    await checkboxes[0].click();
+    await checkboxes[1].click();
+    await screen.getByRole("button", { name: /^tag$/i }).click();
+    await screen.getByRole("button", { name: "VIP" }).click();
+    await expect
+      .element(screen.getByText("Tag added to 1 contact"))
+      .toBeInTheDocument();
+    await screen.getByRole("button", { name: /close/i }).click();
+
+    await checkboxes[0].click();
+    await checkboxes[1].click();
+    await screen.getByRole("button", { name: /^tag$/i }).click();
+    await screen.getByRole("button", { name: "VIP" }).click();
+
+    await expect
+      .element(screen.getByText("Tag removed from 2 contacts"))
+      .toBeInTheDocument();
+    await expect
+      .poll(() => screen.getByRole("row").getByText("VIP").all().length)
+      .toBe(0);
+    await screen.getByRole("button", { name: /close/i }).click();
+  });
+
+  it("creates a new tag inline and applies it to the full selected list", async () => {
+    const screen = await render(<BulkTagButton />);
+
+    await expect
+      .poll(() => getSelectionCheckboxes(screen.container).length)
+      .toBe(2);
+
+    const checkboxes = getSelectionCheckboxes(screen.container);
+    await checkboxes[0].click();
+    await checkboxes[1].click();
+
+    await screen.getByRole("button", { name: /^Tag$/ }).click();
+    await screen.getByRole("button", { name: /Create new tag/ }).click();
+
+    await expect
+      .element(
+        screen.getByText(
+          "Create a new tag and apply it to the selected contacts.",
+        ),
+      )
+      .toBeVisible();
+
+    await screen.getByLabelText("Tag name").fill("Prospect");
+    await screen.getByRole("button", { name: /^Save$/ }).click();
+
+    await expect
+      .element(screen.getByText("Tag added to 2 contacts"))
+      .toBeInTheDocument();
+    await expect.element(screen.getByText("Prospect").first()).toBeVisible();
+    // close the notification
+    await screen.getByRole("button", { name: /close/i }).click();
+  });
+
+  it("imports contacts from a dialog with no resource to pick", async () => {
+    const screen = await render(<DesktopEmpty />);
+
+    await screen.getByRole("button", { name: "Import CSV" }).click();
+
+    await expect
+      .element(screen.getByRole("heading", { name: "Import contacts" }))
+      .toBeVisible();
+    await expect
+      .element(screen.getByLabelText("Resource"))
+      .not.toBeInTheDocument();
+  });
+
+  describe("account manager filter", () => {
+    beforeAll(() => {
+      page.viewport(1600, 900);
+    });
+
+    it("restricts the list to the contacts of the account manager an admin picks", async () => {
+      const screen = await render(<AdminAccountManagerFilter />);
+
+      await expect.element(screen.getByText("Ada Lovelace")).toBeVisible();
+      await expect.element(screen.getByText("Grace Hopper")).toBeVisible();
+
+      await screen.getByRole("button", { name: "Marie Curie" }).click();
+
+      await expect.element(screen.getByText("Grace Hopper")).toBeVisible();
+      await expect
+        .element(screen.getByText("Ada Lovelace"))
+        .not.toBeInTheDocument();
+    });
+
+    it("brings every contact back when the admin untoggles the account manager", async () => {
+      const screen = await render(<AdminAccountManagerFilter />);
+
+      await screen.getByRole("button", { name: "Marie Curie" }).click();
+      await expect
+        .element(screen.getByText("Ada Lovelace"))
+        .not.toBeInTheDocument();
+
+      await screen.getByRole("button", { name: "Marie Curie" }).click();
+
+      await expect.element(screen.getByText("Ada Lovelace")).toBeVisible();
+      await expect.element(screen.getByText("Grace Hopper")).toBeVisible();
+    });
+
+    it("keeps the current user out of the account manager list, offering only Me", async () => {
+      const screen = await render(<AdminAccountManagerFilter />);
+
+      await expect
+        .element(screen.getByRole("button", { name: "Me" }))
+        .toBeVisible();
+      await expect
+        .element(screen.getByRole("button", { name: "Jane Doe" }))
+        .not.toBeInTheDocument();
+    });
+
+    it("offers no account manager list to a user who is not an admin", async () => {
+      const screen = await render(<NonAdminAccountManagerFilter />);
+
+      await expect
+        .element(screen.getByRole("button", { name: "Me" }))
+        .toBeVisible();
+      await expect
+        .element(screen.getByRole("button", { name: "Marie Curie" }))
+        .not.toBeInTheDocument();
+    });
+  });
+
+  describe("header on mobile", () => {
+    beforeAll(() => {
+      page.viewport(375, 667);
+    });
+
+    it("leaves name search to the global search, keeping filters", async () => {
+      const screen = await render(<MobileSuccess />);
+
+      await expect.element(screen.getByText("Ada Lovelace")).toBeVisible();
+      await expect
+        .element(screen.getByRole("button", { name: "Search", exact: true }))
+        .toBeVisible();
+      await expect
+        .element(screen.getByRole("button", { name: "Add filter" }))
+        .toBeVisible();
+      await expect.element(screen.getByRole("textbox")).not.toBeInTheDocument();
+    });
+
+    it("drops a name search it has no search box to show", async () => {
+      const screen = await render(<MobileWithNameSearch />);
+
+      await expect.element(screen.getByText("Ada Lovelace")).toBeVisible();
+      await expect.element(screen.getByText("Grace Hopper")).toBeVisible();
+    });
+  });
+
+  describe("account manager filter on mobile", () => {
+    beforeAll(() => {
+      // Under the `md` breakpoint, so ResponsiveFilters renders its sheet, but
+      // still wide enough for the desktop list itself: production serves
+      // <ContactListMobile> at phone widths, and this desktop list collapses its
+      // name column to 0px there.
+      page.viewport(700, 800);
+    });
+
+    it("picks an account manager from inside the filter sheet", async () => {
+      const screen = await render(<AdminAccountManagerFilter />);
+
+      await expect.element(screen.getByText("Ada Lovelace")).toBeVisible();
+
+      await screen.getByRole("button", { name: "Add filter" }).click();
+      await screen.getByRole("button", { name: "Marie Curie" }).click();
+      await screen.getByRole("button", { name: "Confirm" }).click();
+
+      await expect.element(screen.getByText("Grace Hopper")).toBeVisible();
+      await expect
+        .element(screen.getByText("Ada Lovelace"))
+        .not.toBeInTheDocument();
+    });
+  });
+});
+
+const getSelectionCheckboxes = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll('[data-slot="checkbox"]')).map(
+    (element) => element as HTMLElement,
+  );

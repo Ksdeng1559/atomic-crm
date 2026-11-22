@@ -1,0 +1,156 @@
+---
+title: Configuration
+description: This document explains how to customize the Atomic CRM application.
+---
+
+Admin users can already customize the application domain-specific data (e.g., deal stages, note statuses, etc.) via [the Settings page](../user//settings). However, developers can go further and define the defaults for these data by configuring the `<CRM>` component in `src/App.tsx`.
+
+Other customizations require changes to the source code.
+
+## The `<CRM>` component
+
+The entry point of the frontend application is the `src/App.tsx` file. By default, this file simply renders the `<CRM>` component, which is the root component of Atomic CRM.
+
+```tsx
+import { CRM } from '@/components/atomic-crm/root/CRM';
+
+const App = () => <CRM />;
+
+export default App;
+```
+
+`<CRM>` accepts various props to customize the application domain and look and feel, so the `App.tsx` file is the best place to configure your CRM.
+
+For instance, the following code snippet shows how to customize the CRM application domain-specific data.
+
+```tsx
+import { CRM } from '@/components/atomic-crm/root/CRM';
+
+const App = () => (
+    <CRM
+        companySectors={[
+            { value: 'technology', label: 'Technology' },
+            { value: 'finance', label: 'Finance' },
+        ]}
+        dealCategories={[
+            { value: 'copywriting', label: 'Copywriting' },
+            { value: 'design', label: 'Design' },
+        ]}
+        dealPipelineStatuses={['won']}
+        dealStages={[
+            { value: 'opportunity', label: 'Opportunity' },
+            { value: 'proposal-sent', label: 'Proposal Sent' },
+            { value: 'won', label: 'Won' },
+            { value: 'lost', label: 'Lost' },
+        ]}
+        noteStatuses={[
+            { value: 'cold', label: 'Cold', color: '#7dbde8' },
+            { value: 'warm', label: 'Warm', color: '#e8cb7d' },
+            { value: 'hot', label: 'Hot', color: '#e88b7d' },
+        ]}
+        taskTypes={[
+            { value: 'call', label: 'Call' },
+            { value: 'email', label: 'Email' },
+            { value: 'meeting', label: 'Meeting' },
+        ]}
+    />
+);
+
+export default App;
+```
+
+`<CRM>` accepts the following props:
+
+| Props                  | Description                                                                          | Type           |
+| ---------------------- | ------------------------------------------------------------------------------------ | -------------- |
+| `companySectors`       | The list of company sectors used in the application.                                 | LabeledValue[] |
+| `currency`             | The ISO 4217 currency code used to format monetary values (default: `"USD"`).        | string         |
+| `darkModeLogo`         | Logo shown in dark mode and on the auth pages. Use an imported asset, an absolute URL, or a data URI — never a route-relative path (it breaks on nested routes like `/oauth/consent`). | string         |
+| `darkTheme`            | The theme to use when the application is in dark mode.                               | RaThemeOptions |
+| `dealCategories`       | The categories of deals used in the application.                                     | LabeledValue[] |
+| `dealPipelineStatuses` | The statuses of deals in the pipeline used in the application                        | string[]       |
+| `dealStages`           | The stages of deals used in the application.                                         | DealStage[]    |
+| `lightModeLogo`        | Logo shown in light mode. Same rule as `darkModeLogo`: imported asset, absolute URL, or data URI only. | string         |
+| `lightTheme`           | The theme to use when the application is in light mode.                              | RaThemeOptions |
+| `noteStatuses`         | The statuses of notes used in the application.                                       | NoteStatus[]   |
+| `taskTypes`            | The types of tasks used in the application.                                          | LabeledValue[] |
+| `title`                | The title of the CRM application.                                                    | string         |
+
+## Languages (i18n)
+
+Atomic CRM language configuration is managed in `src/components/atomic-crm/providers/commons/i18nProvider.ts`.
+
+By default, this repository ships with two locales:
+
+- `en` (English)
+- `fr` (French)
+
+The `i18nProvider` defines:
+
+- the initial locale resolver (`getInitialLocale`, browser language with `en` fallback)
+- the list of available locales (`availableLocales`)
+- how messages are resolved for each locale
+
+The language switcher appears in the Profile page when more than one locale is configured. See [User Profile](../../users/preferences#changing-your-language) for the end-user point of view.
+
+### Adding a New Language
+
+1. Import a translation package for the base messages (Shadcn Admin Kit comes with [35 languages integrations](https://marmelab.com/ra-core/translationlocales/))
+2. Create a message catalog for the CRM messages. Use the English messages catalog as a base (`src/components/atomic-crm/providers/commons/englishCrmMessages.ts`).
+3. Merge these two translation files using the `mergeTranslations` utility
+4. Edit `src/components/atomic-crm/providers/commons/i18nProvider.ts` and add a new locale with the merged messages to the provider.
+5. Import the new locale for date formatting in `src/components/atomic-crm/misc/RelativeDate.tsx`.
+6. Start the app, switch locale from the Profile page, and verify that the new locale is working as expected.
+
+### Type-Checking Message Catalogs
+
+For in-repo locales (like `fr`), use strict typing so missing keys fail at compile time:
+
+```ts
+import type { CrmMessages } from './englishCrmMessages';
+
+export const frenchCrmMessages = {
+    crm: {
+        // ...
+    },
+} satisfies CrmMessages;
+```
+
+For external/custom locales, you can choose either approach:
+
+- strict typing (`CrmMessages`) if you want a complete catalog
+- partial typing (`PartialCrmMessages`) if you prefer incremental translations with English fallback
+
+Example with partial typing:
+
+```ts
+import type { PartialCrmMessages } from './englishCrmMessages';
+
+const polishMessages: PartialCrmMessages = {
+    crm: {
+        // only override what you need
+    },
+};
+```
+
+If an official package does not exist for a given integration (for example `ra-supabase-language-<locale>`), keep English integration messages as the base and override only the keys you need for your locale.
+
+## Disabling Telemetry
+
+In production, atomic-crm applications send an anonymous request on mount to a telemetry server operated by Marmelab. You can see this request by looking at the Network tab of your browser DevTools:
+
+```
+https://atomic-crm-telemetry.marmelab.com/atomic-crm-telemetry
+```
+
+The only data sent to the telemetry server is the admin domain (e.g. “example.com”) - no personal data is ever sent, and no cookie is included in the response. The atomic-crm team uses these domains to track the usage of the framework.
+
+You can opt out of telemetry by simply adding `disableTelemetry` to the `<CRM>` component:
+
+```tsx
+import { CRM } from '@/components/atomic-crm/root/CRM';
+
+const App = () => <CRM disableTelemetry />;
+
+export default App;
+```

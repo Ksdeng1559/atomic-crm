@@ -1,0 +1,267 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { useAuthProvider, useTranslate } from "ra-core";
+import { Layout } from "@/components/supabase/layout";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
+/**
+ * Authorization UI for OAuth Consent Page
+ *
+ * When third-party apps initiate OAuth, users will be redirected to this page
+ * to approve or deny the authorization request.
+ *
+ * Anonymous users will be redirected to the login page first.
+ *
+ * Inspired from https://supabase.com/docs/guides/auth/oauth-server/getting-started?queryGroups=oauth-setup&oauth-setup=dashboard#example-authorization-ui
+ */
+export function OAuthConsentPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const authorizationId = searchParams.get("authorization_id");
+  const authProvider = useAuthProvider();
+  const translate = useTranslate();
+
+  const [authDetails, setAuthDetails] =
+    useState<OAuthAuthorizationDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [approved, setApproved] = useState(false);
+
+  useEffect(() => {
+    async function loadAuthDetails() {
+      if (!authorizationId) {
+        setError("Missing authorization_id");
+        setLoading(false);
+        return;
+      }
+      if (!authProvider) {
+        setError("Auth provider not available");
+        setLoading(false);
+        return;
+      }
+
+      // useLogin sends the user back to this location state after login
+      const redirectToLogin = () =>
+        navigate("/login", {
+          state: {
+            nextPathname: OAuthConsentPage.path,
+            nextSearch: `?authorization_id=${encodeURIComponent(authorizationId)}`,
+          },
+        });
+
+      // Check if user is authenticated
+      try {
+        await authProvider.checkAuth({});
+      } catch {
+        redirectToLogin();
+        return;
+      }
+
+      // Get authorization details using the authorization_id
+      const { data, error } =
+        await authProvider.getAuthorizationDetails(authorizationId);
+
+      if (error?.name === "AuthSessionMissingError") {
+        // checkAuth only reads the local session, which the server may have
+        // revoked since: clear it and ask the user to log in again
+        await authProvider.logout({});
+        redirectToLogin();
+        return;
+      }
+      if (error) {
+        setError(error.message);
+      } else if ("redirect_url" in data) {
+        // The user already consented to this client: skip the consent screen
+        window.location.href = data.redirect_url;
+        return;
+      } else {
+        setAuthDetails(data as OAuthAuthorizationDetails);
+      }
+
+      setLoading(false);
+    }
+
+    loadAuthDetails();
+  }, [authProvider, authorizationId, navigate]);
+
+  async function handleApprove() {
+    if (!authorizationId || !authProvider) return;
+
+    setSubmitting(true);
+    const { data, error } =
+      await authProvider.approveAuthorization(authorizationId);
+
+    if (error) {
+      setError(error.message);
+      setSubmitting(false);
+    } else {
+      // Show success message and redirect to client app
+      setApproved(true);
+      window.location.href = data.redirect_url;
+    }
+  }
+
+  async function handleDeny() {
+    if (!authorizationId || !authProvider) return;
+
+    setSubmitting(true);
+    const { data, error } =
+      await authProvider.denyAuthorization(authorizationId);
+    if (error) {
+      setError(error.message);
+      setSubmitting(false);
+    } else {
+      // Redirect to client app with error
+      window.location.href = data.redirect_url;
+    }
+  }
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex flex-col space-y-2 text-center">
+          <p className="text-muted-foreground">
+            {translate("ra.message.loading", { _: "Loading..." })}
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex flex-col space-y-2 text-center">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {translate("ra.message.error", { _: "Error" })}
+          </h1>
+          <p className="text-destructive">{error}</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!authDetails) {
+    return (
+      <Layout>
+        <div className="flex flex-col space-y-2 text-center">
+          <p className="text-muted-foreground">
+            {translate("ra-supabase.oauth.no_request", {
+              _: "No authorization request found",
+            })}
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (approved) {
+    return (
+      <Layout>
+        <div className="flex flex-col space-y-2 text-center">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {translate("ra-supabase.oauth.approved", {
+              _: "Authorization Approved",
+            })}
+          </h1>
+          <p className="text-muted-foreground">
+            {translate("ra-supabase.oauth.close_tab", {
+              _: "You can now close this tab.",
+            })}
+          </p>
+        </div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout>
+      <div className="flex flex-col space-y-2 text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {translate("ra-supabase.oauth.authorize", {
+            _: "Authorize Application",
+          })}
+        </h1>
+        <p className="text-muted-foreground">
+          {translate("ra-supabase.oauth.authorize_details", {
+            _: "This application wants to access your account",
+          })}
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{authDetails.client.name}</CardTitle>
+          <CardDescription>{authDetails.redirect_uri}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm">
+            {translate("ra-supabase.oauth.access_scope", {
+              _: "It will be able to read and modify your data, with the same permissions as your account.",
+            })}
+          </p>
+        </CardContent>
+        <CardFooter className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleDeny}
+            disabled={submitting}
+            className="flex-1"
+          >
+            {translate("ra.action.cancel", { _: "Deny" })}
+          </Button>
+          <Button
+            onClick={handleApprove}
+            disabled={submitting}
+            className="flex-1"
+          >
+            {translate("ra.action.confirm", { _: "Approve" })}
+          </Button>
+        </CardFooter>
+      </Card>
+    </Layout>
+  );
+}
+
+OAuthConsentPage.path = "/oauth/consent";
+
+/**
+ * copied from @supabase/auth-js/src/lib/types.ts
+ * to avoid adding a hard import to a Supabase package
+ * because this page can also be used with FakeRest
+ */
+type OAuthAuthorizationDetails = {
+  /** The authorization ID */
+  authorization_id: string;
+  /** Redirect URL - present if user already consented (can be used to trigger immediate redirect) */
+  redirect_uri?: string;
+  /** User object associated with the authorization */
+  /** OAuth client requesting authorization */
+  client: {
+    /** Unique identifier for the OAuth client (UUID) */
+    id: string;
+    /** Human-readable name of the OAuth client */
+    name: string;
+    /** URI of the OAuth client's website */
+    uri: string;
+    /** URI of the OAuth client's logo */
+    logo_uri: string;
+  };
+  user: {
+    /** User ID (UUID) */
+    id: string;
+    /** User email */
+    email: string;
+  };
+  /** Space-separated list of requested scopes */
+  scope: string;
+};

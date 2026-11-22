@@ -1,0 +1,130 @@
+import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ChevronDownIcon } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+import { useConfigurationContext } from "../root/ConfigurationContext";
+import { useTranslate } from "ra-core";
+
+const NONE_VALUE = "__none__";
+
+type StatusSelectorProps = {
+  disabled?: boolean;
+  status?: string;
+  setStatus: (status: string) => void;
+  triggerClassName?: string;
+};
+
+export const StatusSelector = ({
+  disabled,
+  status,
+  setStatus,
+  triggerClassName,
+}: StatusSelectorProps) => {
+  const { noteStatuses } = useConfigurationContext();
+  const translate = useTranslate();
+  const isMobile = useIsMobile();
+  const noneLabel = translate("resources.contacts.background.status_none", {
+    _: "None",
+  });
+
+  if (isMobile) {
+    // use native select on mobile for better performance and accessibility
+    const selectedOption = noteStatuses.find((s) => s.value === status);
+    return (
+      <div className={cn("relative", "w-32", triggerClassName)}>
+        <div
+          aria-hidden="true"
+          className={cn(
+            "border-input flex w-full items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs h-9",
+            disabled && "cursor-not-allowed opacity-50",
+          )}
+        >
+          <span className="flex items-center gap-2 line-clamp-1">
+            {selectedOption ? (
+              <>
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: selectedOption.color }}
+                />
+                {selectedOption.label}
+              </>
+            ) : (
+              noneLabel
+            )}
+          </span>
+          <ChevronDownIcon className="size-4 opacity-50 shrink-0" />
+        </div>
+        <select
+          disabled={disabled}
+          value={status || ""}
+          onChange={(e) => setStatus(e.target.value)}
+          aria-label={translate("resources.notes.fields.status", {
+            _: "Status",
+          })}
+          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+        >
+          <option value="">{noneLabel}</option>
+          {noteStatuses.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  /**
+   * "No status" needs a selectable item of its own, and an item cannot carry an empty
+   * value, so it uses a sentinel that is converted back to an empty string on change.
+   */
+  const handleValueChange = (value: string | null) => {
+    setStatus(!value || value === NONE_VALUE ? "" : value);
+  };
+
+  // <SelectValue> renders the trigger label from this map; the items render from it too.
+  const items = [
+    { value: NONE_VALUE, label: noneLabel },
+    ...noteStatuses.map((statusOption) => ({
+      value: statusOption.value,
+      label: <StatusOption {...statusOption} />,
+    })),
+  ];
+
+  return (
+    <Select
+      disabled={disabled}
+      value={status || NONE_VALUE}
+      onValueChange={handleValueChange}
+      items={items}
+    >
+      <SelectTrigger className={cn("w-32", triggerClassName)}>
+        <SelectValue placeholder={noneLabel} />
+      </SelectTrigger>
+      <SelectContent>
+        {items.map((item) => (
+          <SelectItem key={item.value} value={item.value}>
+            {item.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};
+
+const StatusOption = ({ color, label }: { color: string; label: string }) => (
+  <div className="flex items-center gap-2">
+    <span
+      className="inline-block w-2.5 h-2.5 rounded-full"
+      style={{ backgroundColor: color }}
+    />
+    {label}
+  </div>
+);
