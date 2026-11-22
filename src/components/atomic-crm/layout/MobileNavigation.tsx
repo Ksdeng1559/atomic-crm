@@ -11,6 +11,7 @@ import {
   ListTodo,
   Plus,
   Settings,
+  BriefcaseBusiness,
   StickyNote,
   UserPlus,
   Users,
@@ -33,6 +34,8 @@ export const MobileNavigation = () => {
     currentPath = "/contacts";
   } else if (matchPath("/companies/*", location.pathname)) {
     currentPath = "/companies";
+  } else if (matchPath("/investor-organizations/*", location.pathname)) {
+    currentPath = "/investor-organizations";
   } else if (matchPath("/tasks/*", location.pathname)) {
     currentPath = "/tasks";
   } else if (matchPath("/deals/*", location.pathname)) {
@@ -82,6 +85,12 @@ export const MobileNavigation = () => {
             Icon={ListTodo}
             label={translate("resources.tasks.name", { smart_count: 2 })}
             isActive={currentPath === "/tasks"}
+          />
+          <NavigationButton
+            href="/investor-organizations"
+            Icon={BriefcaseBusiness}
+            label="Investors"
+            isActive={currentPath === "/investor-organizations"}
           />
           <SettingsButton />
         </>
